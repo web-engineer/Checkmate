@@ -5,6 +5,7 @@ import type { IJobsRepository } from "@/domain/jobs/job.repository.interface.js"
 import { jobId, type Job, type JobSeed } from "@/domain/jobs/job.type.js";
 import type { INetworkService } from "@/service/networkService.js";
 import type { IProxyResolver } from "@/service/network/ProxyResolver.js";
+import type { INotificationsService } from "@/domain/notifications/notification.service.js";
 import type { ILogger } from "@/utils/logger.js";
 import {
 	DEFAULT_EGRESS_POLL_INTERVAL_SECONDS,
@@ -56,6 +57,7 @@ export class EgressService implements IEgressService {
 		private jobsRepository: IJobsRepository,
 		private networkService: INetworkService,
 		private proxyResolver: IProxyResolver,
+		private notificationsService: INotificationsService,
 		private logger: ILogger
 	) {}
 
@@ -269,7 +271,7 @@ export class EgressService implements IEgressService {
 		const recovered = await this.egressStateRepository.markRecovered(results, now);
 		await this.releaseRecoveryJob(job);
 		if (!recovered) {
-			// Another process performed the transition.
+			// Another process performed the transition and owns the notification.
 			return;
 		}
 
@@ -279,5 +281,6 @@ export class EgressService implements IEgressService {
 			method: "checkRecovery",
 			details: { results },
 		});
+		await this.notificationsService.sendEgressRecoveredNotification(recovered, settings.egressNotifications ?? []);
 	};
 }

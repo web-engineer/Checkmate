@@ -8,6 +8,7 @@ import { IEmailService } from "@/service/emailService.js";
 import { IProxiesService } from "@/domain/proxies/proxy.service.js";
 import { IEgressStateService } from "@/domain/egress/egress-state.service.js";
 import { Settings } from "@/domain/app-settings/app-settings.type.js";
+import { INotificationsRepository } from "@/domain/notifications/notification.repository.interface.js";
 
 export interface ISettingsController {
 	getAppSettings: RequestHandler;
@@ -20,16 +21,19 @@ class SettingsController implements ISettingsController {
 	private emailService: IEmailService;
 	private proxiesService: IProxiesService;
 	private egressStateService: IEgressStateService;
+	private notificationsRepository: INotificationsRepository;
 	constructor(
 		settingsService: ISettingsService,
 		emailService: IEmailService,
 		proxiesService: IProxiesService,
-		egressStateService: IEgressStateService
+		egressStateService: IEgressStateService,
+		notificationsRepository: INotificationsRepository
 	) {
 		this.settingsService = settingsService;
 		this.emailService = emailService;
 		this.proxiesService = proxiesService;
 		this.egressStateService = egressStateService;
+		this.notificationsRepository = notificationsRepository;
 	}
 
 	buildAppSettings = async (dbSettings: Settings) => {
@@ -79,6 +83,16 @@ class SettingsController implements ISettingsController {
 		}
 
 		const previousSettings = await this.settingsService.getDBSettings();
+		if (validatedBody.egressNotifications && validatedBody.egressNotifications.length > 0) {
+			const requestedIds = [...new Set(validatedBody.egressNotifications)];
+			const notifications = await this.notificationsRepository.findNotificationsByIds(requestedIds);
+			const foundIds = new Set(notifications.map((notification) => notification.id));
+			const missing = requestedIds.filter((id) => !foundIds.has(id));
+			if (missing.length > 0) {
+				throw new AppError({ message: `Referenced notification does not exist: ${missing.join(", ")}`, status: 422 });
+			}
+		}
+
 		const updatedSettings = await this.settingsService.updateDbSettings(validatedBody);
 
 		// Switching the egress check on or off starts from a clean state: no degraded episode, no pending recovery job
